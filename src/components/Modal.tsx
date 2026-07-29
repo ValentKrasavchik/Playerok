@@ -11,13 +11,12 @@ type ModalProps = {
 
 export function Modal({ title, onClose, children, footer, setup }: ModalProps) {
   return (
-    <div className="overlay" role="presentation" onClick={onClose}>
+    <div className="overlay" role="presentation">
       <div
         className={`modal${setup ? ' modal--setup' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        onClick={(event) => event.stopPropagation()}
       >
         <header className="modal__header">
           <h2 className="modal__title">{title}</h2>

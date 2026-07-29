@@ -4,7 +4,7 @@ import { RefundModal } from './components/RefundModal';
 import type { RefundDemoContext } from './refundLogic';
 import './styles.css';
 
-type Step = 'idle' | 'setup' | 'refund';
+type Step = 'setup' | 'refund';
 
 export default function App() {
   const [step, setStep] = useState<Step>('setup');
@@ -17,29 +17,24 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const openSetup = () => {
+    setContext(null);
+    setStep('setup');
+  };
+
   return (
     <div className="app-shell">
       <div className="app-intro">
         <h1>Демо возврата средств</h1>
         <p>
           Укажите параметры сделки, затем откроется динамическая форма возврата
-          по сценариям из Figma.
+          по сценариям.
         </p>
       </div>
 
-      {step === 'idle' ? (
-        <button
-          type="button"
-          className="open-demo-btn"
-          onClick={() => setStep('setup')}
-        >
-          Начать демо
-        </button>
-      ) : null}
-
       {step === 'setup' ? (
         <SetupModal
-          onClose={() => setStep('idle')}
+          onClose={openSetup}
           onSubmit={(next) => {
             setContext(next);
             setStep('refund');
@@ -50,14 +45,8 @@ export default function App() {
       {step === 'refund' && context ? (
         <RefundModal
           context={context}
-          onClose={() => {
-            setContext(null);
-            setStep('idle');
-          }}
-          onBack={() => {
-            setContext(null);
-            setStep('setup');
-          }}
+          onClose={openSetup}
+          onBack={openSetup}
           onSuccess={(message) => setToast(message)}
         />
       ) : null}
