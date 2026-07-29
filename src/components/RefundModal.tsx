@@ -16,6 +16,7 @@ import {
   type RefundOptionId,
 } from '../refundLogic';
 import { parseAmount } from '../utils';
+import { assetUrl } from '../assets';
 
 type RefundModalProps = {
   context: RefundDemoContext;
@@ -238,7 +239,7 @@ export function RefundModal({
           ))}
         </select>
         <span className="field--select-icon" aria-hidden="true">
-          <img src="/icons/icon-chevron.svg" alt="" width={14} height={8} />
+          <img src={assetUrl('icons/icon-chevron.svg')} alt="" width={14} height={8} />
         </span>
       </div>
     </Modal>

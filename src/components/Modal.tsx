@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { assetUrl } from '../assets';
 
 type ModalProps = {
   title: string;
@@ -26,7 +27,12 @@ export function Modal({ title, onClose, children, footer, setup }: ModalProps) {
             aria-label="Закрыть"
             onClick={onClose}
           >
-            <img src="/icons/icon-close.svg" alt="" width={18} height={18} />
+            <img
+              src={assetUrl('icons/icon-close.svg')}
+              alt=""
+              width={18}
+              height={18}
+            />
           </button>
         </header>
         <div className="modal__body">{children}</div>
