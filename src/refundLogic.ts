@@ -1,6 +1,9 @@
 export type DealStatus = 'in_progress' | 'completed';
 
+export type RefundMode = 'strict' | 'flexible';
+
 export type RefundDemoContext = {
+  mode: RefundMode;
   dealStatus: DealStatus;
   dealBalance: number;
   sellerBalance: number | null;

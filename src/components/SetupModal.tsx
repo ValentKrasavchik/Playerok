@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Radio } from './Radio';
-import type { DealStatus, RefundDemoContext } from '../refundLogic';
+import type {
+  DealStatus,
+  RefundDemoContext,
+  RefundMode,
+} from '../refundLogic';
 import { parseAmount } from '../utils';
 
 type SetupModalProps = {
@@ -10,6 +14,7 @@ type SetupModalProps = {
 };
 
 export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
+  const [mode, setMode] = useState<RefundMode>('strict');
   const [dealStatus, setDealStatus] = useState<DealStatus>('in_progress');
   const [dealBalanceRaw, setDealBalanceRaw] = useState('900');
   const [sellerBalanceRaw, setSellerBalanceRaw] = useState('800');
@@ -31,6 +36,7 @@ export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
     if (!canSubmit || dealBalance === null) return;
 
     onSubmit({
+      mode,
       dealStatus,
       dealBalance,
       sellerBalance: dealStatus === 'completed' ? sellerBalance : null,
@@ -55,6 +61,34 @@ export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
       }
     >
       <div className="field-group">
+        <div>
+          <span className="field-label">Вариант логики</span>
+          <div className="status-group">
+            <button
+              type="button"
+              className={`status-option${mode === 'strict' ? ' status-option--selected' : ''}`}
+              onClick={() => setMode('strict')}
+            >
+              <Radio checked={mode === 'strict'} />
+              <span className="status-option__text">
+                <strong>Строгий вариант</strong>
+                <small>Текущая логика без изменений</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`status-option${mode === 'flexible' ? ' status-option--selected' : ''}`}
+              onClick={() => setMode('flexible')}
+            >
+              <Radio checked={mode === 'flexible'} />
+              <span className="status-option__text">
+                <strong>Гибкий вариант</strong>
+                <small>Ручное распределение сумм</small>
+              </span>
+            </button>
+          </div>
+        </div>
+
         <div>
           <span className="field-label">Статус сделки</span>
           <div className="status-group">
