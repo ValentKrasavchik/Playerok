@@ -1,6 +1,6 @@
 export type DealStatus = 'in_progress' | 'completed';
 
-export type RefundMode = 'strict' | 'flexible';
+export type RefundMode = 'strict' | 'strict_v2' | 'flexible';
 
 export type RefundDemoContext = {
   mode: RefundMode;
@@ -13,12 +13,14 @@ export type RefundDemoContext = {
 export type RefundOptionId =
   | 'full_from_deal'
   | 'partial_from_deal'
+  | 'amount_from_deal'
   | 'full_from_seller'
   | 'partial_from_seller'
   | 'full_with_refund_bank'
   | 'partial_with_refund_bank'
   | 'full_from_refund_bank'
-  | 'partial_from_refund_bank';
+  | 'partial_from_refund_bank'
+  | 'amount_from_refund_bank';
 
 export type RefundBreakdown = {
   refundAmount: number;
@@ -43,6 +45,9 @@ export function getAvailableRefundOptions(
   context: RefundDemoContext,
 ): RefundOptionId[] {
   if (context.dealStatus === 'in_progress') {
+    if (context.mode === 'strict_v2') {
+      return ['amount_from_deal'];
+    }
     return ['full_from_deal', 'partial_from_deal'];
   }
 
@@ -65,6 +70,10 @@ export function getAvailableRefundOptions(
     ];
   }
 
+  if (context.mode === 'strict_v2') {
+    return ['amount_from_refund_bank'];
+  }
+
   return ['full_from_refund_bank', 'partial_from_refund_bank'];
 }
 
@@ -78,6 +87,18 @@ export function showSellerInHeader(context: RefundDemoContext): boolean {
 
 export function isPartialOption(option: RefundOptionId): boolean {
   return option.startsWith('partial_');
+}
+
+export function requiresAmountInput(option: RefundOptionId): boolean {
+  return (
+    isPartialOption(option) ||
+    option === 'amount_from_deal' ||
+    option === 'amount_from_refund_bank'
+  );
+}
+
+export function isSingleAmountOption(option: RefundOptionId): boolean {
+  return option === 'amount_from_deal' || option === 'amount_from_refund_bank';
 }
 
 export function getOptionCopy(option: RefundOptionId): {
@@ -96,6 +117,18 @@ export function getOptionCopy(option: RefundOptionId): {
         title: 'Частичный возврат с баланса сделки',
         description:
           'Напишите сумму, которая будет списана с баланса сделки, и возвращена покупателю',
+      };
+    case 'amount_from_deal':
+      return {
+        title: 'Возврат с баланса сделки',
+        description:
+          'Напишите сумму, которая будет списана с баланса сделки, и возвращена покупателю',
+      };
+    case 'amount_from_refund_bank':
+      return {
+        title: 'Возврат с банка возвратов',
+        description:
+          'Напишите сумму, которая будет списана с банка возвратов и возвращена покупателю',
       };
     case 'full_from_seller':
       return {
@@ -157,6 +190,24 @@ export function validatePartialAmount(
           valid: false,
           error:
             'Сумма частичного возврата должна быть меньше баланса сделки',
+        };
+      }
+      return { valid: true, error: null };
+
+    case 'amount_from_deal':
+      if (enteredAmount > context.dealBalance) {
+        return {
+          valid: false,
+          error: 'Сумма возврата не может быть больше баланса сделки',
+        };
+      }
+      return { valid: true, error: null };
+
+    case 'amount_from_refund_bank':
+      if (enteredAmount > context.dealBalance) {
+        return {
+          valid: false,
+          error: 'Сумма возврата не может быть больше баланса сделки',
         };
       }
       return { valid: true, error: null };
@@ -238,6 +289,26 @@ export function calculateRefund(
       };
     }
 
+    case 'amount_from_deal': {
+      const amount = enteredAmount ?? 0;
+      return {
+        refundAmount: amount,
+        fromDealBalance: amount,
+        fromSellerBalance: 0,
+        fromRefundBank: 0,
+      };
+    }
+
+    case 'amount_from_refund_bank': {
+      const amount = enteredAmount ?? 0;
+      return {
+        refundAmount: amount,
+        fromDealBalance: 0,
+        fromSellerBalance: 0,
+        fromRefundBank: amount,
+      };
+    }
+
     case 'full_from_seller':
       return {
         refundAmount: context.dealBalance,
@@ -313,6 +384,7 @@ export function showsRefundBankLine(option: RefundOptionId): boolean {
     option === 'full_with_refund_bank' ||
     option === 'partial_with_refund_bank' ||
     option === 'full_from_refund_bank' ||
-    option === 'partial_from_refund_bank'
+    option === 'partial_from_refund_bank' ||
+    option === 'amount_from_refund_bank'
   );
 }

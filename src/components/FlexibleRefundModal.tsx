@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
+import { ConfirmRefundModal } from './ConfirmRefundModal';
 import {
   DEPARTMENTS,
   formatRub,
@@ -37,6 +38,7 @@ export function FlexibleRefundModal({
   );
   const [comment, setComment] = useState('');
   const [department, setDepartment] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     const next = getFlexibleDefaults(context);
@@ -91,6 +93,7 @@ export function FlexibleRefundModal({
   };
 
   return (
+    <>
     <Modal
       title="Произвести возврат"
       onClose={onClose}
@@ -104,10 +107,7 @@ export function FlexibleRefundModal({
             type="button"
             className="primary-btn"
             disabled={!canSubmit}
-            onClick={() => {
-              onSuccess(`Возврат ${formatRub(refundAmount)} выполнен (демо)`);
-              onBack();
-            }}
+            onClick={() => setConfirmOpen(true)}
           >
             Сделать возврат
           </button>
@@ -209,5 +209,16 @@ export function FlexibleRefundModal({
         </span>
       </div>
     </Modal>
+    {confirmOpen ? (
+      <ConfirmRefundModal
+        amount={refundAmount}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          onSuccess(`Возврат ${formatRub(refundAmount)} выполнен (демо)`);
+          onBack();
+        }}
+      />
+    ) : null}
+    </>
   );
 }

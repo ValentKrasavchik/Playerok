@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Radio } from './Radio';
+import { ConfirmRefundModal } from './ConfirmRefundModal';
 import {
   DEPARTMENTS,
   calculateRefund,
@@ -8,7 +9,8 @@ import {
   formatRubSigned,
   getAvailableRefundOptions,
   getOptionCopy,
-  isPartialOption,
+  isSingleAmountOption,
+  requiresAmountInput,
   showSellerInHeader,
   showsRefundBankLine,
   validatePartialAmount,
@@ -35,30 +37,39 @@ export function StrictRefundModal({
     () => getAvailableRefundOptions(context),
     [context],
   );
+  const isSingleAmountCard =
+    options.length === 1 && isSingleAmountOption(options[0]);
 
   const [selected, setSelected] = useState<RefundOptionId>(options[0]);
-  const [amountRaw, setAmountRaw] = useState('');
+  const [amountRaw, setAmountRaw] = useState(
+    isSingleAmountCard ? String(context.dealBalance) : '',
+  );
   const [comment, setComment] = useState('');
   const [department, setDepartment] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     setSelected(options[0]);
-    setAmountRaw('');
-  }, [options]);
+    if (isSingleAmountOption(options[0])) {
+      setAmountRaw(String(context.dealBalance));
+    } else {
+      setAmountRaw('');
+    }
+  }, [options, context.dealBalance]);
 
   const enteredAmount = parseAmount(amountRaw);
-  const partial = isPartialOption(selected);
+  const needsAmount = requiresAmountInput(selected);
 
   const validation = useMemo(() => {
-    if (!partial) return { valid: true, error: null as string | null };
+    if (!needsAmount) return { valid: true, error: null as string | null };
     if (enteredAmount === null) {
       return { valid: false, error: null as string | null };
     }
     return validatePartialAmount(selected, enteredAmount, context);
-  }, [partial, enteredAmount, selected, context]);
+  }, [needsAmount, enteredAmount, selected, context]);
 
   const breakdown = useMemo(() => {
-    if (partial && !validation.valid) {
+    if (needsAmount && !validation.valid) {
       return {
         refundAmount: 0,
         fromDealBalance: 0,
@@ -69,22 +80,25 @@ export function StrictRefundModal({
     return calculateRefund(
       selected,
       context,
-      partial ? enteredAmount : null,
+      needsAmount ? enteredAmount : null,
     );
-  }, [partial, validation.valid, selected, context, enteredAmount]);
+  }, [needsAmount, validation.valid, selected, context, enteredAmount]);
 
   const canSubmit =
     validation.valid &&
-    (!partial || (enteredAmount !== null && enteredAmount > 0));
+    (!needsAmount || (enteredAmount !== null && enteredAmount > 0));
 
   const handleSelect = (option: RefundOptionId) => {
     setSelected(option);
-    if (!isPartialOption(option)) {
+    if (!requiresAmountInput(option)) {
       setAmountRaw('');
+    } else if (isSingleAmountOption(option) && amountRaw === '') {
+      setAmountRaw(String(context.dealBalance));
     }
   };
 
   return (
+    <>
     <Modal
       title="Произвести возврат"
       onClose={onClose}
@@ -100,12 +114,7 @@ export function StrictRefundModal({
             type="button"
             className="primary-btn"
             disabled={!canSubmit}
-            onClick={() => {
-              onSuccess(
-                `Возврат ${formatRub(breakdown.refundAmount)} выполнен (демо)`,
-              );
-              onBack();
-            }}
+            onClick={() => setConfirmOpen(true)}
           >
             Сделать возврат
           </button>
@@ -131,11 +140,10 @@ export function StrictRefundModal({
         {options.map((option) => {
           const copy = getOptionCopy(option);
           const isSelected = selected === option;
-          const showAmount = isPartialOption(option);
+          const showAmount = requiresAmountInput(option);
           const showError =
-            isSelected &&
-            isPartialOption(option) &&
-            Boolean(validation.error);
+            isSelected && needsAmount && Boolean(validation.error);
+          const hideRadio = isSingleAmountCard;
 
           let bankAmount: number | null = null;
           if (option === 'partial_with_refund_bank') {
@@ -148,7 +156,7 @@ export function StrictRefundModal({
             showsRefundBankLine(option) &&
             (option === 'full_with_refund_bank' ||
               option === 'full_from_refund_bank' ||
-              (isPartialOption(option) &&
+              (requiresAmountInput(option) &&
                 validation.valid &&
                 enteredAmount !== null))
           ) {
@@ -160,23 +168,28 @@ export function StrictRefundModal({
               key={option}
               className={[
                 'option-card',
-                isSelected ? 'option-card--selected' : '',
+                isSelected || hideRadio ? 'option-card--selected' : '',
+                hideRadio ? 'option-card--static' : '',
                 showError ? 'option-card--error' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
-              role="button"
-              tabIndex={0}
-              onClick={() => handleSelect(option)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  handleSelect(option);
-                }
-              }}
+              role={hideRadio ? undefined : 'button'}
+              tabIndex={hideRadio ? undefined : 0}
+              onClick={hideRadio ? undefined : () => handleSelect(option)}
+              onKeyDown={
+                hideRadio
+                  ? undefined
+                  : (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handleSelect(option);
+                      }
+                    }
+              }
             >
               <div className="option-card__main">
-                <Radio checked={isSelected} />
+                {hideRadio ? null : <Radio checked={isSelected} />}
                 <div className="option-card__text">
                   <p className="option-card__title">{copy.title}</p>
                   <p className="option-card__desc">{copy.description}</p>
@@ -188,7 +201,7 @@ export function StrictRefundModal({
                   className="field field--amount"
                   placeholder="Сумма"
                   inputMode="decimal"
-                  value={isSelected ? amountRaw : ''}
+                  value={isSelected || hideRadio ? amountRaw : ''}
                   onClick={(event) => event.stopPropagation()}
                   onFocus={() => handleSelect(option)}
                   onChange={(event) => {
@@ -248,5 +261,18 @@ export function StrictRefundModal({
         </span>
       </div>
     </Modal>
+    {confirmOpen ? (
+      <ConfirmRefundModal
+        amount={breakdown.refundAmount}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          onSuccess(
+            `Возврат ${formatRub(breakdown.refundAmount)} выполнен (демо)`,
+          );
+          onBack();
+        }}
+      />
+    ) : null}
+    </>
   );
 }

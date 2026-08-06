@@ -22,6 +22,8 @@ export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
 
   const dealBalance = parseAmount(dealBalanceRaw);
   const sellerBalance = parseAmount(sellerBalanceRaw);
+  const isStrict = mode === 'strict' || mode === 'strict_v2';
+  const strictVersion = mode === 'strict_v2' ? 2 : 1;
 
   const canSubmit = useMemo(() => {
     if (dealBalance === null || dealBalance < 0) return false;
@@ -64,17 +66,43 @@ export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
         <div>
           <span className="field-label">Вариант логики</span>
           <div className="status-group">
-            <button
-              type="button"
-              className={`status-option${mode === 'strict' ? ' status-option--selected' : ''}`}
-              onClick={() => setMode('strict')}
+            <div
+              className={`status-option status-option--with-chips${isStrict ? ' status-option--selected' : ''}`}
             >
-              <Radio checked={mode === 'strict'} />
-              <span className="status-option__text">
-                <strong>Строгий вариант</strong>
-                <small>Текущая логика без изменений</small>
-              </span>
-            </button>
+              <button
+                type="button"
+                className="status-option__main"
+                onClick={() =>
+                  setMode(strictVersion === 2 ? 'strict_v2' : 'strict')
+                }
+              >
+                <Radio checked={isStrict} />
+                <span className="status-option__text">
+                  <strong>Строгий вариант</strong>
+                  <small>
+                    {strictVersion === 1
+                      ? 'V1: текущая логика без изменений'
+                      : 'V2: один инпут для сделки в процессе'}
+                  </small>
+                </span>
+              </button>
+              <div className="version-chips" role="group" aria-label="Версия строгого варианта">
+                <button
+                  type="button"
+                  className={`version-chip${isStrict && strictVersion === 1 ? ' version-chip--active' : ''}`}
+                  onClick={() => setMode('strict')}
+                >
+                  1
+                </button>
+                <button
+                  type="button"
+                  className={`version-chip${isStrict && strictVersion === 2 ? ' version-chip--active' : ''}`}
+                  onClick={() => setMode('strict_v2')}
+                >
+                  2
+                </button>
+              </div>
+            </div>
             <button
               type="button"
               className={`status-option${mode === 'flexible' ? ' status-option--selected' : ''}`}
