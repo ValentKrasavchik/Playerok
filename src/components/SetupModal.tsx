@@ -1,11 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Radio } from './Radio';
-import type {
-  DealStatus,
-  RefundDemoContext,
-  RefundMode,
-} from '../refundLogic';
+import type { DealStatus, RefundDemoContext } from '../refundLogic';
+import { formatRub, getCommission } from '../refundLogic';
 import { parseAmount } from '../utils';
 
 type SetupModalProps = {
@@ -14,34 +11,45 @@ type SetupModalProps = {
 };
 
 export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
-  const [mode, setMode] = useState<RefundMode>('strict');
-  const [dealStatus, setDealStatus] = useState<DealStatus>('in_progress');
+  const [dealStatus, setDealStatus] = useState<DealStatus>('completed');
   const [dealBalanceRaw, setDealBalanceRaw] = useState('900');
+  const [sellerAccruedRaw, setSellerAccruedRaw] = useState('850');
   const [sellerBalanceRaw, setSellerBalanceRaw] = useState('800');
   const [sellerName, setSellerName] = useState('DarkMark32');
 
   const dealBalance = parseAmount(dealBalanceRaw);
+  const sellerAccrued = parseAmount(sellerAccruedRaw);
   const sellerBalance = parseAmount(sellerBalanceRaw);
-  const isStrict = mode === 'strict' || mode === 'strict_v2';
-  const strictVersion = mode === 'strict_v2' ? 2 : 1;
+
+  const commission =
+    dealBalance !== null && sellerAccrued !== null
+      ? getCommission(dealBalance, sellerAccrued)
+      : null;
 
   const canSubmit = useMemo(() => {
     if (dealBalance === null || dealBalance < 0) return false;
     if (!sellerName.trim()) return false;
+
+    if (sellerAccrued !== null) {
+      if (sellerAccrued < 0 || sellerAccrued > dealBalance) return false;
+    }
+
     if (dealStatus === 'completed') {
       return sellerBalance !== null && sellerBalance >= 0;
     }
-    return true;
-  }, [dealBalance, dealStatus, sellerBalance, sellerName]);
+    return sellerAccrued !== null && sellerAccrued >= 0;
+  }, [dealBalance, dealStatus, sellerBalance, sellerAccrued, sellerName]);
 
   const handleSubmit = () => {
     if (!canSubmit || dealBalance === null) return;
 
     onSubmit({
-      mode,
+      mode: 'strict',
       dealStatus,
       dealBalance,
+      sellerAccrued,
       sellerBalance: dealStatus === 'completed' ? sellerBalance : null,
+      alreadyRefunded: 0,
       sellerName: sellerName.trim(),
     });
   };
@@ -63,60 +71,6 @@ export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
       }
     >
       <div className="field-group">
-        <div>
-          <span className="field-label">Вариант логики</span>
-          <div className="status-group">
-            <div
-              className={`status-option status-option--with-chips${isStrict ? ' status-option--selected' : ''}`}
-            >
-              <button
-                type="button"
-                className="status-option__main"
-                onClick={() =>
-                  setMode(strictVersion === 2 ? 'strict_v2' : 'strict')
-                }
-              >
-                <Radio checked={isStrict} />
-                <span className="status-option__text">
-                  <strong>Строгий вариант</strong>
-                  <small>
-                    {strictVersion === 1
-                      ? 'V1: текущая логика без изменений'
-                      : 'V2: один инпут для сделки в процессе'}
-                  </small>
-                </span>
-              </button>
-              <div className="version-chips" role="group" aria-label="Версия строгого варианта">
-                <button
-                  type="button"
-                  className={`version-chip${isStrict && strictVersion === 1 ? ' version-chip--active' : ''}`}
-                  onClick={() => setMode('strict')}
-                >
-                  1
-                </button>
-                <button
-                  type="button"
-                  className={`version-chip${isStrict && strictVersion === 2 ? ' version-chip--active' : ''}`}
-                  onClick={() => setMode('strict_v2')}
-                >
-                  2
-                </button>
-              </div>
-            </div>
-            <button
-              type="button"
-              className={`status-option${mode === 'flexible' ? ' status-option--selected' : ''}`}
-              onClick={() => setMode('flexible')}
-            >
-              <Radio checked={mode === 'flexible'} />
-              <span className="status-option__text">
-                <strong>Гибкий вариант</strong>
-                <small>Ручное распределение сумм</small>
-              </span>
-            </button>
-          </div>
-        </div>
-
         <div>
           <span className="field-label">Статус сделки</span>
           <div className="status-group">
@@ -141,7 +95,7 @@ export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
 
         <div>
           <label className="field-label" htmlFor="deal-balance">
-            Баланс сделки
+            Сумма сделки
           </label>
           <input
             id="deal-balance"
@@ -151,6 +105,23 @@ export function SetupModal({ onClose, onSubmit }: SetupModalProps) {
             value={dealBalanceRaw}
             onChange={(event) => setDealBalanceRaw(event.target.value)}
           />
+        </div>
+
+        <div>
+          <label className="field-label" htmlFor="seller-accrued">
+            Начислено продавцу
+          </label>
+          <input
+            id="seller-accrued"
+            className="field field--amount"
+            inputMode="decimal"
+            placeholder="0"
+            value={sellerAccruedRaw}
+            onChange={(event) => setSellerAccruedRaw(event.target.value)}
+          />
+          {commission !== null ? (
+            <p className="field-hint">Комиссия: {formatRub(commission)}</p>
+          ) : null}
         </div>
 
         {dealStatus === 'completed' ? (

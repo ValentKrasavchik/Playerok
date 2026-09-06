@@ -1,4 +1,5 @@
 import { formatRub } from '../refundLogic';
+import { useEscapeToClose } from '../useEscapeToClose';
 
 type ConfirmRefundModalProps = {
   amount: number;
@@ -11,8 +12,15 @@ export function ConfirmRefundModal({
   onCancel,
   onConfirm,
 }: ConfirmRefundModalProps) {
+  const overlayRef = useEscapeToClose(onCancel);
+
   return (
-    <div className="overlay overlay--confirm" role="presentation">
+    <div
+      ref={overlayRef}
+      data-modal-overlay
+      className="overlay overlay--confirm"
+      role="presentation"
+    >
       <div
         className="confirm-modal"
         role="dialog"

@@ -1,12 +1,25 @@
+import {
+  calculateSellerAccruedRefund,
+  getCommission,
+  getRemainingGross,
+  validateRefundAmount,
+} from './sellerAccruedLogic';
+
 export type DealStatus = 'in_progress' | 'completed';
 
-export type RefundMode = 'strict' | 'strict_v2' | 'flexible';
+export type RefundMode = 'strict';
 
 export type RefundDemoContext = {
   mode: RefundMode;
   dealStatus: DealStatus;
+  /** Исходная сумма сделки (gross). */
   dealBalance: number;
+  /** Начислено продавцу по сделке — не путать с балансом кошелька. */
+  sellerAccrued: number | null;
+  /** Фактический баланс кошелька продавца. */
   sellerBalance: number | null;
+  /** Сумма уже завершённых возвратов по сделке. */
+  alreadyRefunded: number;
   sellerName: string;
 };
 
@@ -27,6 +40,10 @@ export type RefundBreakdown = {
   fromDealBalance: number;
   fromSellerBalance: number;
   fromRefundBank: number;
+  remainingAmount: number;
+  newSellerAccrued: number;
+  sellerAccruedReduction: number;
+  commissionReduction: number;
 };
 
 export type ValidationResult = {
@@ -34,44 +51,90 @@ export type ValidationResult = {
   error: string | null;
 };
 
-export const DEPARTMENTS = [
-  'Поддержка',
-  'Модерация',
-  'Финансы',
-  'Безопасность',
-] as const;
+function remainingGross(context: RefundDemoContext): number {
+  return getRemainingGross(context.dealBalance, context.alreadyRefunded);
+}
+
+function sellerAccruedOrZero(context: RefundDemoContext): number {
+  if (context.sellerAccrued !== null) {
+    return context.sellerAccrued;
+  }
+  return remainingGross(context);
+}
+
+/** Сколько ещё можно списать с продавца по этой сделке (не больше начисления и кошелька). */
+export function getSellerFundableAmount(context: RefundDemoContext): number {
+  const wallet = context.sellerBalance ?? 0;
+  if (wallet <= 0) {
+    return 0;
+  }
+
+  if (context.sellerAccrued === null) {
+    return wallet;
+  }
+
+  const currentAccrued = calculateSellerAccruedRefund({
+    grossAmount: context.dealBalance,
+    originalSellerAccrued: context.sellerAccrued,
+    alreadyRefunded: 0,
+    refundAmount: context.alreadyRefunded,
+    sellerWalletBalance: null,
+  }).newSellerAccrued;
+
+  return Math.min(wallet, currentAccrued);
+}
+
+function buildEconomicBreakdown(
+  context: RefundDemoContext,
+  refundAmount: number,
+  fromDealBalance: number,
+): RefundBreakdown {
+  const economic = calculateSellerAccruedRefund({
+    grossAmount: context.dealBalance,
+    originalSellerAccrued: sellerAccruedOrZero(context),
+    alreadyRefunded: context.alreadyRefunded,
+    refundAmount,
+    sellerWalletBalance: context.sellerBalance,
+  });
+
+  return {
+    refundAmount: economic.refundAmount,
+    fromDealBalance,
+    fromSellerBalance: economic.fromSellerWallet,
+    fromRefundBank: economic.fromRefundBank,
+    remainingAmount: economic.remainingAmount,
+    newSellerAccrued: economic.newSellerAccrued,
+    sellerAccruedReduction: economic.sellerAccruedReduction,
+    commissionReduction: economic.commissionReduction,
+  };
+}
 
 export function getAvailableRefundOptions(
   context: RefundDemoContext,
 ): RefundOptionId[] {
+  const remaining = remainingGross(context);
+
+  if (remaining <= 0) {
+    return [];
+  }
+
   if (context.dealStatus === 'in_progress') {
-    if (context.mode === 'strict_v2') {
-      return ['amount_from_deal'];
-    }
     return ['full_from_deal', 'partial_from_deal'];
   }
 
-  if (
-    context.sellerBalance !== null &&
-    context.sellerBalance >= context.dealBalance
-  ) {
+  // С продавца нельзя взять больше «Начислено продавцу», даже если кошелёк больше.
+  const sellerCover = getSellerFundableAmount(context);
+
+  if (sellerCover >= remaining) {
     return ['full_from_seller', 'partial_from_seller'];
   }
 
-  if (
-    context.sellerBalance !== null &&
-    context.sellerBalance > 0 &&
-    context.sellerBalance < context.dealBalance
-  ) {
+  if (sellerCover > 0) {
     return [
       'full_with_refund_bank',
       'partial_from_seller',
       'partial_with_refund_bank',
     ];
-  }
-
-  if (context.mode === 'strict_v2') {
-    return ['amount_from_refund_bank'];
   }
 
   return ['full_from_refund_bank', 'partial_from_refund_bank'];
@@ -83,6 +146,10 @@ export function showSellerInHeader(context: RefundDemoContext): boolean {
     context.sellerBalance !== null &&
     context.sellerBalance > 0
   );
+}
+
+export function showSellerAccruedInHeader(context: RefundDemoContext): boolean {
+  return context.sellerAccrued !== null && context.sellerAccrued > 0;
 }
 
 export function isPartialOption(option: RefundOptionId): boolean {
@@ -108,15 +175,14 @@ export function getOptionCopy(option: RefundOptionId): {
   switch (option) {
     case 'full_from_deal':
       return {
-        title: 'С баланса сделки',
+        title: 'Полный возврат',
         description:
-          'Сумма будет списана с текущего баланса сделки, и возвращена покупателю',
+          'Возврат будет произведен покупателю в полном объеме из средств сделки',
       };
     case 'partial_from_deal':
       return {
-        title: 'Частичный возврат с баланса сделки',
-        description:
-          'Напишите сумму, которая будет списана с баланса сделки, и возвращена покупателю',
+        title: 'Частичный возврат',
+        description: 'Укажите сумму, которую необходимо вернуть покупателю',
       };
     case 'amount_from_deal':
       return {
@@ -134,37 +200,36 @@ export function getOptionCopy(option: RefundOptionId): {
       return {
         title: 'С баланса продавца',
         description:
-          'Сумма будет списана с баланса продавца, и возвращена покупателю',
+          'Возврат будет произведен покупателю в полном объеме с баланса продавца',
       };
     case 'partial_from_seller':
       return {
         title: 'Частичный возврат с баланса продавца',
-        description:
-          'Напишите сумму, которая будет списана с баланса продавца, и возвращена покупателю',
+        description: 'Укажите сумму, которую необходимо вернуть покупателю',
       };
     case 'full_with_refund_bank':
       return {
-        title: 'С банка возвратов',
+        title: 'Банк возвратов',
         description:
-          'Весь баланс продавца будет списан в счет возврата, оставшаяся сумма будет добавлена из банка возвратов',
+          'Возврат будет произведен за счет баланса продавца, а недостающая сумма - из банка возвратов',
       };
     case 'partial_with_refund_bank':
       return {
-        title: 'Частичный возврат с баланса возвратов',
+        title: 'Частичный возврат из банка возвратов',
         description:
-          'Напишите сумму. Доступные средства будут списаны с баланса продавца, а недостающая часть — из банка возвратов',
+          'Укажите сумму возврата. Средства с баланса продавца будут использованы в первую очередь, недостающая сумма - из банка возвратов',
       };
     case 'full_from_refund_bank':
       return {
-        title: 'С банка возвратов',
+        title: 'Банк возвратов',
         description:
-          'С банка возвратов будет списана вся сумма сделки и возвращена покупателю',
+          'Возврат будет произведен покупателю в полном объеме из банка возвратов',
       };
     case 'partial_from_refund_bank':
       return {
-        title: 'Частичный возврат с банка возвратов',
+        title: 'Частичный возврат из банка возвратов',
         description:
-          'Напишите сумму, которая будет списана с банка возвратов и возвращена покупателю',
+          'Укажите сумму, которую необходимо вернуть покупателю из банка возвратов',
       };
   }
 }
@@ -174,93 +239,77 @@ export function validatePartialAmount(
   enteredAmount: number,
   context: RefundDemoContext,
 ): ValidationResult {
-  const seller = context.sellerBalance ?? 0;
+  const remaining = remainingGross(context);
+  const isPartial = isPartialOption(option);
 
-  if (!Number.isFinite(enteredAmount) || enteredAmount <= 0) {
+  // allowFullAmount=true: only bounds vs deal remainder; partial caps checked below
+  const result = validateRefundAmount(
+    context.dealBalance,
+    context.alreadyRefunded,
+    enteredAmount,
+    true,
+  );
+
+  if (!result.valid) {
+    return { valid: result.valid, error: result.error };
+  }
+
+  if (isPartial && context.sellerAccrued !== null && context.dealStatus === 'in_progress') {
+    const currentAccrued = calculateSellerAccruedRefund({
+      grossAmount: context.dealBalance,
+      originalSellerAccrued: context.sellerAccrued,
+      alreadyRefunded: 0,
+      refundAmount: context.alreadyRefunded,
+      sellerWalletBalance: null,
+    }).newSellerAccrued;
+
+    if (enteredAmount > currentAccrued) {
+      return {
+        valid: false,
+        error: `Сумма частичного возврата должна быть меньше ${formatRub(currentAccrued)}`,
+      };
+    }
+  }
+
+  if (isPartial && enteredAmount >= remaining) {
+    const cap =
+      context.dealStatus === 'in_progress' && context.sellerAccrued !== null
+        ? calculateSellerAccruedRefund({
+            grossAmount: context.dealBalance,
+            originalSellerAccrued: context.sellerAccrued,
+            alreadyRefunded: 0,
+            refundAmount: context.alreadyRefunded,
+            sellerWalletBalance: null,
+          }).newSellerAccrued
+        : remaining;
+
     return {
       valid: false,
-      error: 'Введите сумму больше 0',
+      error: `Сумма частичного возврата должна быть меньше ${formatRub(cap)}`,
     };
   }
 
-  switch (option) {
-    case 'partial_from_deal':
-      if (enteredAmount >= context.dealBalance) {
-        return {
-          valid: false,
-          error:
-            'Сумма частичного возврата должна быть меньше баланса сделки',
-        };
-      }
-      return { valid: true, error: null };
-
-    case 'amount_from_deal':
-      if (enteredAmount > context.dealBalance) {
-        return {
-          valid: false,
-          error: 'Сумма возврата не может быть больше баланса сделки',
-        };
-      }
-      return { valid: true, error: null };
-
-    case 'amount_from_refund_bank':
-      if (enteredAmount > context.dealBalance) {
-        return {
-          valid: false,
-          error: 'Сумма возврата не может быть больше баланса сделки',
-        };
-      }
-      return { valid: true, error: null };
-
-    case 'partial_from_seller': {
-      if (enteredAmount >= context.dealBalance) {
-        return {
-          valid: false,
-          error:
-            'Сумма частичного возврата должна быть меньше доступной суммы возврата по сделке',
-        };
-      }
-      if (enteredAmount >= seller) {
-        return {
-          valid: false,
-          error:
-            'Сумма частичного возврата должна быть меньше баланса продавца',
-        };
-      }
-      return { valid: true, error: null };
+  if (option === 'partial_with_refund_bank') {
+    const sellerCover = getSellerFundableAmount(context);
+    if (enteredAmount <= sellerCover) {
+      return {
+        valid: false,
+        error: `Сумма частичного возврата должна быть больше ${formatRub(sellerCover)}`,
+      };
     }
-
-    case 'partial_with_refund_bank': {
-      if (enteredAmount >= context.dealBalance) {
-        return {
-          valid: false,
-          error:
-            'Сумма частичного возврата должна быть меньше доступной суммы возврата по сделке',
-        };
-      }
-      if (enteredAmount <= seller) {
-        return {
-          valid: false,
-          error:
-            'Сумма частичного возврата с баланса возвратов должна быть больше баланса продавца',
-        };
-      }
-      return { valid: true, error: null };
-    }
-
-    case 'partial_from_refund_bank':
-      if (enteredAmount >= context.dealBalance) {
-        return {
-          valid: false,
-          error:
-            'Сумма частичного возврата должна быть меньше баланса сделки',
-        };
-      }
-      return { valid: true, error: null };
-
-    default:
-      return { valid: true, error: null };
   }
+
+  if (option === 'partial_from_seller') {
+    const sellerCover = getSellerFundableAmount(context);
+    if (enteredAmount > sellerCover) {
+      return {
+        valid: false,
+        error: `Сумма частичного возврата не может быть больше ${formatRub(sellerCover)}`,
+      };
+    }
+  }
+
+  return { valid: true, error: null };
 }
 
 export function calculateRefund(
@@ -268,115 +317,69 @@ export function calculateRefund(
   context: RefundDemoContext,
   enteredAmount: number | null,
 ): RefundBreakdown {
-  const seller = context.sellerBalance ?? 0;
+  const remaining = remainingGross(context);
+  const empty: RefundBreakdown = {
+    refundAmount: 0,
+    fromDealBalance: 0,
+    fromSellerBalance: 0,
+    fromRefundBank: 0,
+    remainingAmount: remaining,
+    newSellerAccrued: 0,
+    sellerAccruedReduction: 0,
+    commissionReduction: 0,
+  };
+
+  if (!option || remaining <= 0) {
+    return empty;
+  }
 
   switch (option) {
     case 'full_from_deal':
-      return {
-        refundAmount: context.dealBalance,
-        fromDealBalance: context.dealBalance,
-        fromSellerBalance: 0,
-        fromRefundBank: 0,
-      };
+      return buildEconomicBreakdown(context, remaining, remaining);
 
-    case 'partial_from_deal': {
-      const amount = enteredAmount ?? 0;
-      return {
-        refundAmount: amount,
-        fromDealBalance: amount,
-        fromSellerBalance: 0,
-        fromRefundBank: 0,
-      };
-    }
-
+    case 'partial_from_deal':
     case 'amount_from_deal': {
       const amount = enteredAmount ?? 0;
-      return {
-        refundAmount: amount,
-        fromDealBalance: amount,
-        fromSellerBalance: 0,
-        fromRefundBank: 0,
-      };
-    }
-
-    case 'amount_from_refund_bank': {
-      const amount = enteredAmount ?? 0;
-      return {
-        refundAmount: amount,
-        fromDealBalance: 0,
-        fromSellerBalance: 0,
-        fromRefundBank: amount,
-      };
+      return buildEconomicBreakdown(context, amount, amount);
     }
 
     case 'full_from_seller':
-      return {
-        refundAmount: context.dealBalance,
-        fromDealBalance: 0,
-        fromSellerBalance: context.dealBalance,
-        fromRefundBank: 0,
-      };
+      return buildEconomicBreakdown(context, remaining, 0);
 
-    case 'partial_from_seller': {
+    case 'partial_from_seller':
+    case 'partial_with_refund_bank':
+    case 'partial_from_refund_bank':
+    case 'amount_from_refund_bank': {
       const amount = enteredAmount ?? 0;
-      return {
-        refundAmount: amount,
-        fromDealBalance: 0,
-        fromSellerBalance: amount,
-        fromRefundBank: 0,
-      };
+      return buildEconomicBreakdown(context, amount, 0);
     }
 
-    case 'full_with_refund_bank': {
-      const fromSellerBalance = Math.min(seller, context.dealBalance);
-      return {
-        refundAmount: context.dealBalance,
-        fromDealBalance: 0,
-        fromSellerBalance,
-        fromRefundBank: context.dealBalance - fromSellerBalance,
-      };
-    }
-
-    case 'partial_with_refund_bank': {
-      const amount = enteredAmount ?? 0;
-      return {
-        refundAmount: amount,
-        fromDealBalance: 0,
-        fromSellerBalance: seller,
-        fromRefundBank: Math.max(0, amount - seller),
-      };
-    }
+    case 'full_with_refund_bank':
+      return buildEconomicBreakdown(context, remaining, 0);
 
     case 'full_from_refund_bank':
-      return {
-        refundAmount: context.dealBalance,
-        fromDealBalance: 0,
-        fromSellerBalance: 0,
-        fromRefundBank: context.dealBalance,
-      };
+      return buildEconomicBreakdown(context, remaining, 0);
 
-    case 'partial_from_refund_bank': {
-      const amount = enteredAmount ?? 0;
-      return {
-        refundAmount: amount,
-        fromDealBalance: 0,
-        fromSellerBalance: 0,
-        fromRefundBank: amount,
-      };
-    }
+    default:
+      return empty;
   }
 }
 
 export function formatRub(value: number): string {
   const formatted = new Intl.NumberFormat('ru-RU', {
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(value);
   return `${formatted} ₽`;
 }
 
 export function formatRubSigned(value: number): string {
   if (value === 0) return `0 ₽`;
-  return `−${formatRub(value).replace(' ₽', '')} ₽`;
+  const formatted = new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+  return `−${formatted} ₽`;
 }
 
 export function showsRefundBankLine(option: RefundOptionId): boolean {
@@ -388,3 +391,5 @@ export function showsRefundBankLine(option: RefundOptionId): boolean {
     option === 'amount_from_refund_bank'
   );
 }
+
+export { getCommission, getRemainingGross };

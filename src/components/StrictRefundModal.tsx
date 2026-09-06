@@ -3,65 +3,80 @@ import { Modal } from './Modal';
 import { Radio } from './Radio';
 import { ConfirmRefundModal } from './ConfirmRefundModal';
 import {
-  DEPARTMENTS,
   calculateRefund,
   formatRub,
-  formatRubSigned,
   getAvailableRefundOptions,
   getOptionCopy,
+  getRemainingGross,
+  isPartialOption,
   isSingleAmountOption,
   requiresAmountInput,
+  showSellerAccruedInHeader,
   showSellerInHeader,
-  showsRefundBankLine,
   validatePartialAmount,
   type RefundDemoContext,
   type RefundOptionId,
 } from '../refundLogic';
 import { parseAmount } from '../utils';
 import { assetUrl } from '../assets';
+import { calcInProgressPartialRelatedOps } from '../sellerAccruedLogic';
+import type { RefundLogData } from './RefundLogModal';
+import type { TransactionDetailData } from './TransactionDetailModal';
 
 type StrictRefundModalProps = {
   context: RefundDemoContext;
   onClose: () => void;
   onBack: () => void;
   onSuccess: (message: string) => void;
+  onRefundCompleted?: (log: RefundLogData) => void;
+  embedded?: boolean;
 };
 
 export function StrictRefundModal({
   context,
-  onClose,
   onBack,
   onSuccess,
+  onRefundCompleted,
+  embedded,
 }: StrictRefundModalProps) {
   const options = useMemo(
     () => getAvailableRefundOptions(context),
     [context],
   );
+  const remainingDeal = getRemainingGross(
+    context.dealBalance,
+    context.alreadyRefunded,
+  );
+
   const isSingleAmountCard =
     options.length === 1 && isSingleAmountOption(options[0]);
 
-  const [selected, setSelected] = useState<RefundOptionId>(options[0]);
+  const [selected, setSelected] = useState<RefundOptionId | null>(
+    options[0] ?? null,
+  );
   const [amountRaw, setAmountRaw] = useState(
-    isSingleAmountCard ? String(context.dealBalance) : '',
+    isSingleAmountCard ? String(remainingDeal) : '',
   );
   const [comment, setComment] = useState('');
-  const [department, setDepartment] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    setSelected(options[0]);
-    if (isSingleAmountOption(options[0])) {
-      setAmountRaw(String(context.dealBalance));
+    const next = options[0] ?? null;
+    setSelected(next);
+    if (next && isSingleAmountOption(next)) {
+      setAmountRaw(String(remainingDeal));
     } else {
       setAmountRaw('');
     }
-  }, [options, context.dealBalance]);
+  }, [options, remainingDeal]);
 
   const enteredAmount = parseAmount(amountRaw);
-  const needsAmount = requiresAmountInput(selected);
+  const needsAmount = selected ? requiresAmountInput(selected) : false;
 
   const validation = useMemo(() => {
-    if (!needsAmount) return { valid: true, error: null as string | null };
+    if (!selected || !needsAmount) {
+      return { valid: true, error: null as string | null };
+    }
     if (enteredAmount === null) {
       return { valid: false, error: null as string | null };
     }
@@ -69,12 +84,16 @@ export function StrictRefundModal({
   }, [needsAmount, enteredAmount, selected, context]);
 
   const breakdown = useMemo(() => {
-    if (needsAmount && !validation.valid) {
+    if (!selected || (needsAmount && !validation.valid)) {
       return {
         refundAmount: 0,
         fromDealBalance: 0,
         fromSellerBalance: 0,
         fromRefundBank: 0,
+        remainingAmount: remainingDeal,
+        newSellerAccrued: 0,
+        sellerAccruedReduction: 0,
+        commissionReduction: 0,
       };
     }
     return calculateRefund(
@@ -82,33 +101,91 @@ export function StrictRefundModal({
       context,
       needsAmount ? enteredAmount : null,
     );
-  }, [needsAmount, validation.valid, selected, context, enteredAmount]);
+  }, [
+    needsAmount,
+    validation.valid,
+    selected,
+    context,
+    enteredAmount,
+    remainingDeal,
+  ]);
 
   const canSubmit =
+    Boolean(selected) &&
     validation.valid &&
     (!needsAmount || (enteredAmount !== null && enteredAmount > 0));
+
+  const isPartialSelected = selected ? isPartialOption(selected) : false;
+  const showSellerAccruedHint =
+    isPartialSelected &&
+    context.dealStatus === 'in_progress' &&
+    validation.valid &&
+    enteredAmount !== null &&
+    enteredAmount > 0 &&
+    breakdown.newSellerAccrued > 0;
+
+  const showBuyerRefundHint =
+    selected === 'partial_from_seller' &&
+    context.dealStatus === 'completed' &&
+    validation.valid &&
+    enteredAmount !== null &&
+    enteredAmount > 0;
+
+  const footerLabel =
+    selected === 'partial_from_seller' ||
+    (isPartialSelected && context.dealStatus === 'in_progress')
+      ? 'Частичный возврат'
+      : 'Возврат';
+
+  const showFooterWarnIcon =
+    context.dealStatus === 'completed' ||
+    (isPartialSelected && context.dealStatus === 'in_progress');
 
   const handleSelect = (option: RefundOptionId) => {
     setSelected(option);
     if (!requiresAmountInput(option)) {
       setAmountRaw('');
     } else if (isSingleAmountOption(option) && amountRaw === '') {
-      setAmountRaw(String(context.dealBalance));
+      setAmountRaw(String(remainingDeal));
     }
+  };
+
+  const resetForm = () => {
+    const next = options[0] ?? null;
+    setSelected(next);
+    setAmountRaw(
+      next && isSingleAmountOption(next) ? String(remainingDeal) : '',
+    );
+    setComment('');
+    setConfirmOpen(false);
   };
 
   return (
     <>
     <Modal
       title="Произвести возврат"
-      onClose={onClose}
+      onClose={onBack}
+      embedded={embedded}
       footer={
         <>
           <div className="footer-total">
             <p className="footer-total__amount">
               {formatRub(breakdown.refundAmount)}
             </p>
-            <p className="footer-total__label">Возврат</p>
+            {showFooterWarnIcon ? (
+              <p className="footer-total__label footer-total__label--partial">
+                <img
+                  className="footer-total__warn-icon"
+                  src={assetUrl('icons/icon-warning.svg')}
+                  alt=""
+                  width={16}
+                  height={16}
+                />
+                {footerLabel}
+              </p>
+            ) : (
+              <p className="footer-total__label">{footerLabel}</p>
+            )}
           </div>
           <button
             type="button"
@@ -123,12 +200,23 @@ export function StrictRefundModal({
     >
       <div className="summary-rows">
         <div className="summary-row">
-          <p className="summary-row__label">Баланс сделки</p>
-          <p className="summary-row__value">{formatRub(context.dealBalance)}</p>
+          <p className="summary-row__label">Сумма сделки</p>
+          <p className="summary-row__value">{formatRub(remainingDeal)}</p>
         </div>
-        {showSellerInHeader(context) ? (
+        {showSellerAccruedInHeader(context) ? (
           <div className="summary-row">
-            <p className="summary-row__label">{context.sellerName}</p>
+            <p className="summary-row__label">Начислено продавцу</p>
+            <p className="summary-row__value">
+              {formatRub(context.sellerAccrued ?? 0)}
+            </p>
+          </div>
+        ) : null}
+        {showSellerInHeader(context) ? (
+          <div className="summary-row summary-row--with-nick">
+            <div className="summary-row__left">
+              <p className="summary-row__label">Баланс продавца</p>
+              <p className="summary-row__nick">{context.sellerName}</p>
+            </div>
             <p className="summary-row__value">
               {formatRub(context.sellerBalance ?? 0)}
             </p>
@@ -145,23 +233,21 @@ export function StrictRefundModal({
             isSelected && needsAmount && Boolean(validation.error);
           const hideRadio = isSingleAmountCard;
 
-          let bankAmount: number | null = null;
-          if (option === 'partial_with_refund_bank') {
-            bankAmount =
-              isSelected && validation.valid && enteredAmount !== null
-                ? breakdown.fromRefundBank
-                : 0;
-          } else if (
+          let bankHintAmount: number | null = null;
+          if (
             isSelected &&
-            showsRefundBankLine(option) &&
             (option === 'full_with_refund_bank' ||
               option === 'full_from_refund_bank' ||
-              (requiresAmountInput(option) &&
+              ((option === 'partial_with_refund_bank' ||
+                option === 'partial_from_refund_bank') &&
                 validation.valid &&
                 enteredAmount !== null))
           ) {
-            bankAmount = breakdown.fromRefundBank;
+            bankHintAmount = breakdown.fromRefundBank;
           }
+
+          const showBankHint =
+            bankHintAmount !== null && bankHintAmount > 0;
 
           return (
             <div
@@ -215,11 +301,60 @@ export function StrictRefundModal({
                 <p className="option-card__error">{validation.error}</p>
               ) : null}
 
-              {bankAmount !== null ? (
-                <div className="summary-row">
-                  <p className="summary-row__label">Банк возвратов</p>
-                  <p className="summary-row__value">
-                    {formatRubSigned(bankAmount)}
+              {isSelected && showSellerAccruedHint ? (
+                <div className="option-card__hint">
+                  <img
+                    className="option-card__hint-icon"
+                    src={assetUrl('icons/icon-warning.svg')}
+                    alt=""
+                    width={16}
+                    height={16}
+                  />
+                  <p className="option-card__hint-text">
+                    Продавцу будет начислено{' '}
+                    <span className="option-card__hint-amount">
+                      {formatRub(breakdown.newSellerAccrued)}
+                    </span>
+                  </p>
+                </div>
+              ) : null}
+
+              {isSelected && showBuyerRefundHint ? (
+                <div className="option-card__hint">
+                  <img
+                    className="option-card__hint-icon"
+                    src={assetUrl('icons/icon-warning.svg')}
+                    alt=""
+                    width={16}
+                    height={16}
+                  />
+                  <p className="option-card__hint-text">
+                    Покупателю будет возвращено{' '}
+                    <span className="option-card__hint-amount">
+                      {formatRub(enteredAmount ?? 0)}
+                    </span>{' '}
+                    из{' '}
+                    <span className="option-card__hint-amount">
+                      {formatRub(context.dealBalance)}
+                    </span>
+                  </p>
+                </div>
+              ) : null}
+
+              {showBankHint ? (
+                <div className="option-card__hint">
+                  <img
+                    className="option-card__hint-icon"
+                    src={assetUrl('icons/icon-warning.svg')}
+                    alt=""
+                    width={16}
+                    height={16}
+                  />
+                  <p className="option-card__hint-text">
+                    Из банка возвратов будет списано{' '}
+                    <span className="option-card__hint-amount">
+                      {formatRub(bankHintAmount ?? 0)}
+                    </span>
                   </p>
                 </div>
               ) : null}
@@ -234,42 +369,96 @@ export function StrictRefundModal({
         value={comment}
         onChange={(event) => setComment(event.target.value)}
       />
-
-      <div className="field--select-wrap">
-        <select
-          className={`field--select${department ? '' : ' placeholder'}`}
-          value={department}
-          required
-          onChange={(event) => setDepartment(event.target.value)}
-        >
-          <option value="" disabled>
-            Выберите свой отдел
-          </option>
-          {DEPARTMENTS.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <span className="field--select-icon" aria-hidden="true">
-          <img
-            src={assetUrl('icons/icon-chevron.svg')}
-            alt=""
-            width={14}
-            height={8}
-          />
-        </span>
-      </div>
     </Modal>
     {confirmOpen ? (
       <ConfirmRefundModal
         amount={breakdown.refundAmount}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => {
-          onSuccess(
-            `Возврат ${formatRub(breakdown.refundAmount)} выполнен (демо)`,
-          );
-          onBack();
+          const idBase = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+          const sellerName = context.sellerName;
+          const buyerName = 'wwwqwq0 (0)';
+          const adminName = 'ValentAdmin (1)';
+          const sellerDisplay = /\(\d+\)$/.test(sellerName)
+            ? sellerName
+            : `${sellerName} (0)`;
+          const commentValue = comment.trim();
+          const sellerAccruedValue = context.sellerAccrued ?? 0;
+          const isInProgressPartial =
+            context.dealStatus === 'in_progress' &&
+            breakdown.remainingAmount > 0;
+          const isCompleted = context.dealStatus === 'completed';
+          const related = isInProgressPartial
+            ? calcInProgressPartialRelatedOps(
+                context.dealBalance,
+                sellerAccruedValue,
+                context.alreadyRefunded,
+                breakdown.refundAmount,
+              )
+            : {
+                buyerDebit: breakdown.refundAmount,
+                sellerCredit: breakdown.refundAmount,
+              };
+
+          const debitAmount = isInProgressPartial
+            ? related.buyerDebit
+            : isCompleted && breakdown.fromSellerBalance > 0
+              ? breakdown.fromSellerBalance
+              : breakdown.refundAmount;
+          const creditAmount = isInProgressPartial
+            ? related.sellerCredit
+            : breakdown.refundAmount;
+
+          const now = new Date();
+          const createdAtLabel = `${now.getDate()} ${now.toLocaleString('ru-RU', { month: 'long' })} в ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+
+          const debitTx: TransactionDetailData = {
+            id: `debit_${idBase}`,
+            type: 'debit',
+            amount: debitAmount,
+            sellerName: sellerDisplay,
+            buyerName,
+            adminName,
+            dealStatus: context.dealStatus,
+            dealBalance: context.dealBalance,
+            comment: commentValue,
+            createdAtLabel,
+          };
+
+          const creditTx: TransactionDetailData = {
+            id: `credit_${idBase}`,
+            type: 'credit',
+            amount: creditAmount,
+            sellerName: sellerDisplay,
+            buyerName,
+            adminName,
+            dealStatus: context.dealStatus,
+            dealBalance: context.dealBalance,
+            comment: commentValue,
+            createdAtLabel,
+          };
+
+          const log: RefundLogData = {
+            id: `refund_${idBase}`,
+            mode: context.mode,
+            createdAtLabel,
+            statusLabel: 'Завершен',
+            comment: commentValue,
+            sellerName: sellerDisplay,
+            buyerName,
+            adminName,
+            dealStatus: context.dealStatus,
+            dealBalance: context.dealBalance,
+            sellerAccrued: sellerAccruedValue,
+            refundAmount: breakdown.refundAmount,
+            debit: debitTx,
+            credit: creditTx,
+            breakdown,
+          };
+
+          onRefundCompleted?.(log);
+          onSuccess(`Возврат ${formatRub(breakdown.refundAmount)} выполнен`);
+          resetForm();
         }}
       />
     ) : null}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { assetUrl } from '../assets';
+import { useEscapeToClose } from '../useEscapeToClose';
 
 type ModalProps = {
   title: string;
@@ -7,13 +8,28 @@ type ModalProps = {
   children: ReactNode;
   footer?: ReactNode;
   setup?: boolean;
+  embedded?: boolean;
 };
 
-export function Modal({ title, onClose, children, footer, setup }: ModalProps) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+  setup,
+  embedded,
+}: ModalProps) {
+  const overlayRef = useEscapeToClose(onClose);
+
   return (
-    <div className="overlay" role="presentation">
+    <div
+      ref={overlayRef}
+      data-modal-overlay
+      className={embedded ? 'modal-host modal-host--embedded' : 'overlay'}
+      role="presentation"
+    >
       <div
-        className={`modal${setup ? ' modal--setup' : ''}`}
+        className={`modal${setup ? ' modal--setup' : ''}${embedded ? ' modal--embedded' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
