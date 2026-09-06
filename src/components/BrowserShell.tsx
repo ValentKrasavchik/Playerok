@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type BrowserTabId = 'refund' | 'operations';
+export type BrowserTabId = 'refund' | 'operations' | 'scenarios';
 
 type BrowserShellProps = {
   activeTab: BrowserTabId;
@@ -12,6 +12,7 @@ type BrowserShellProps = {
 const TABS: Array<{ id: BrowserTabId; label: string }> = [
   { id: 'refund', label: 'Произвести возврат' },
   { id: 'operations', label: 'Операции' },
+  { id: 'scenarios', label: 'Сценарии' },
 ];
 
 export function BrowserShell({
@@ -50,7 +51,11 @@ export function BrowserShell({
           Новая конфигурация
         </button>
       </div>
-      <div className="browser-content">{children}</div>
+      <div
+        className={`browser-content${activeTab === 'scenarios' ? ' browser-content--scroll' : ''}`}
+      >
+        {children}
+      </div>
     </div>
   );
 }
