@@ -77,7 +77,7 @@ export function createOperationsFromRefund(
     timeLabel,
     amount: log.refundAmount,
     title: 'Возврат',
-    subtitle: `Заказ № ${orderNo}`,
+    subtitle: log.adminName.replace(/\s*\(\d+\)\s*$/, ''),
     sellerName: log.sellerName,
     buyerName: log.buyerName,
     adminName: log.adminName,

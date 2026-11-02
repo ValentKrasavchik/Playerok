@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { formatRub, formatRubSigned } from '../refundLogic';
 import type { OperationKind, OperationRecord, OperationsState } from '../operationsStore';
+import { assetUrl } from '../assets';
 import { RefundLogModal } from './RefundLogModal';
 import { TransactionDetailModal, type TransactionDetailData } from './TransactionDetailModal';
 
@@ -21,6 +22,23 @@ function matchesSubTab(kind: OperationKind, tab: OpsSubTab): boolean {
   if (tab === 'all') return true;
   if (tab === 'ledger') return kind === 'credit' || kind === 'debit';
   return kind === 'refund';
+}
+
+function formatAmount(op: OperationRecord): string {
+  if (op.kind === 'credit') {
+    return `+${formatRub(op.amount)}`;
+  }
+  if (op.kind === 'debit') {
+    return formatRubSigned(op.amount);
+  }
+  return formatRub(op.amount);
+}
+
+function rowIcon(kind: OperationKind): string {
+  if (kind === 'debit' || kind === 'credit') {
+    return assetUrl('icons/wallet-emoji.png');
+  }
+  return assetUrl('icons/wallet-emoji.png');
 }
 
 export function OperationsPage({ state, onClear }: OperationsPageProps) {
@@ -114,17 +132,20 @@ export function OperationsPage({ state, onClear }: OperationsPageProps) {
       </div>
 
       <div className="ops-filters">
-        <button type="button" className="ops-filter">
+        <button type="button" className="ops-filter ops-filter--with-icon">
+          <span className="ops-filter__icon-wrap">
+            <img
+              src={assetUrl('icons/filters.svg')}
+              alt=""
+              width={16}
+              height={16}
+            />
+            <span className="ops-filter__badge">1</span>
+          </span>
           Все фильтры
         </button>
         <button type="button" className="ops-filter">
           Администратор
-        </button>
-        <button type="button" className="ops-filter">
-          Период
-        </button>
-        <button type="button" className="ops-filter">
-          Сумма
         </button>
         {subTab === 'ledger' ? (
           <>
@@ -135,8 +156,7 @@ export function OperationsPage({ state, onClear }: OperationsPageProps) {
               Возврат
             </button>
           </>
-        ) : null}
-        {subTab === 'refunds' ? (
+        ) : (
           <>
             <button type="button" className="ops-filter">
               Продавец
@@ -148,25 +168,37 @@ export function OperationsPage({ state, onClear }: OperationsPageProps) {
               Банк возвратов
             </button>
           </>
-        ) : null}
+        )}
+        <button type="button" className="ops-filter ops-filter--active">
+          Период
+          <img
+            className="ops-filter__clear"
+            src={assetUrl('icons/filter-clear.svg')}
+            alt=""
+            width={24}
+            height={24}
+          />
+        </button>
+        <button type="button" className="ops-filter">
+          Сумма
+        </button>
       </div>
 
       <div className="ops-summary">
         {subTab === 'refunds' ? (
           <>
-            <span>
-              В банке возвратов:{' '}
-              <strong>{formatRub(state.refundBankBalance)}</strong>
+            <span>В банке возвратов: {formatRub(state.refundBankBalance)}</span>
+            <span className="ops-summary__dot" aria-hidden="true">
+              ·
             </span>
-            <span className="ops-summary__delta">
-              + {formatRub(bankDelta.inn).replace(' ₽', '')} ₽ / −{' '}
-              {formatRub(bankDelta.out).replace(' ₽', '')} ₽
+            <span>
+              + {formatRub(bankDelta.inn)} / − {formatRub(bankDelta.out)}
             </span>
           </>
         ) : (
           <span>
-            + {formatRub(ledgerTotals.credit).replace(' ₽', '')} ₽ / −{' '}
-            {formatRub(ledgerTotals.debit).replace(' ₽', '')} ₽
+            + {formatRub(ledgerTotals.credit)} / −{' '}
+            {formatRub(ledgerTotals.debit)}
           </span>
         )}
       </div>
@@ -174,8 +206,14 @@ export function OperationsPage({ state, onClear }: OperationsPageProps) {
       <div className="ops-list">
         {visible.length === 0 ? (
           <div className="ops-empty">
-            Пока нет операций. Сделайте возврат на первой вкладке — записи
-            появятся здесь и сохранятся в браузере.
+            <img
+              className="ops-empty__icon"
+              src={assetUrl('icons/wallet-emoji.png')}
+              alt=""
+              width={48}
+              height={48}
+            />
+            <p className="ops-empty__text">Список операций пока пуст</p>
           </div>
         ) : (
           visible.map((op) => (
@@ -185,26 +223,34 @@ export function OperationsPage({ state, onClear }: OperationsPageProps) {
               className="ops-row"
               onClick={() => openOperation(op)}
             >
-              <span
-                className={`ops-row__icon ops-row__icon--${op.kind}`}
-                aria-hidden="true"
-              />
+              <span className="ops-row__icon" aria-hidden="true">
+                <img
+                  src={rowIcon(op.kind)}
+                  alt=""
+                  width={40}
+                  height={40}
+                />
+              </span>
               <span className="ops-row__main">
                 <span className="ops-row__title">{op.title}</span>
-                <span className="ops-row__subtitle">{op.subtitle}</span>
+                <span className="ops-row__subtitle">
+                  {op.kind === 'refund' ? (
+                    <>
+                      <img
+                        src={assetUrl('icons/moderation.png')}
+                        alt=""
+                        width={20}
+                        height={20}
+                      />
+                      {op.subtitle}
+                    </>
+                  ) : (
+                    op.subtitle
+                  )}
+                </span>
               </span>
               <span className="ops-row__time">{op.timeLabel}</span>
-              <span
-                className={`ops-row__amount${
-                  op.kind === 'credit' ? ' ops-row__amount--credit' : ''
-                }`}
-              >
-                {op.kind === 'credit'
-                  ? `+ ${formatRub(op.amount).replace(' ₽', '')}`
-                  : op.kind === 'debit'
-                    ? formatRubSigned(op.amount).replace('₽', '').trim()
-                    : formatRub(op.amount).replace(' ₽', '')}
-              </span>
+              <span className="ops-row__amount">{formatAmount(op)}</span>
             </button>
           ))
         )}

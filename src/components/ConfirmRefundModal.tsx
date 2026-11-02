@@ -32,8 +32,9 @@ export function ConfirmRefundModal({
             Произвести возврат?
           </h2>
           <p className="confirm-modal__desc">
-            После подтверждения сумма будет возвращена покупателю. Действие
-            нельзя будет отменить
+            После подтверждения сумма будет возвращена покупателю.
+            <br />
+            Действие нельзя будет отменить
           </p>
         </div>
         <div className="confirm-modal__actions">

@@ -29,7 +29,7 @@ export function Modal({
       role="presentation"
     >
       <div
-        className={`modal${setup ? ' modal--setup' : ''}${embedded ? ' modal--embedded' : ''}`}
+        className={`modal${setup ? ' modal--setup' : ' modal--refund'}${embedded ? ' modal--embedded' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -43,10 +43,12 @@ export function Modal({
             onClick={onClose}
           >
             <img
-              src={assetUrl('icons/icon-close.svg')}
+              src={assetUrl(
+                setup ? 'icons/icon-close.svg' : 'icons/icon-close-32.svg',
+              )}
               alt=""
-              width={18}
-              height={18}
+              width={setup ? 18 : 32}
+              height={setup ? 18 : 32}
             />
           </button>
         </header>

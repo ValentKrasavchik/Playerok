@@ -178,8 +178,8 @@ export function StrictRefundModal({
                   className="footer-total__warn-icon"
                   src={assetUrl('icons/icon-warning.svg')}
                   alt=""
-                  width={16}
-                  height={16}
+                  width={20}
+                  height={20}
                 />
                 {footerLabel}
               </p>
@@ -198,177 +198,200 @@ export function StrictRefundModal({
         </>
       }
     >
-      <div className="summary-rows">
-        <div className="summary-row">
-          <p className="summary-row__label">Сумма сделки</p>
-          <p className="summary-row__value">{formatRub(remainingDeal)}</p>
-        </div>
-        {showSellerAccruedInHeader(context) ? (
+      <section className="modal-section modal-section--summary">
+        <div className="summary-rows">
           <div className="summary-row">
-            <p className="summary-row__label">Начислено продавцу</p>
-            <p className="summary-row__value">
-              {formatRub(context.sellerAccrued ?? 0)}
-            </p>
+            <p className="summary-row__label">Сумма сделки</p>
+            <p className="summary-row__value">{formatRub(remainingDeal)}</p>
           </div>
-        ) : null}
-        {showSellerInHeader(context) ? (
-          <div className="summary-row summary-row--with-nick">
-            <div className="summary-row__left">
-              <p className="summary-row__label">Баланс продавца</p>
-              <p className="summary-row__nick">{context.sellerName}</p>
+          {showSellerAccruedInHeader(context) ? (
+            <div className="summary-row">
+              <p className="summary-row__label">Начислено продавцу</p>
+              <p className="summary-row__value">
+                {formatRub(context.sellerAccrued ?? 0)}
+              </p>
             </div>
-            <p className="summary-row__value">
-              {formatRub(context.sellerBalance ?? 0)}
-            </p>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="options-shell">
-        {options.map((option) => {
-          const copy = getOptionCopy(option);
-          const isSelected = selected === option;
-          const showAmount = requiresAmountInput(option);
-          const showError =
-            isSelected && needsAmount && Boolean(validation.error);
-          const hideRadio = isSingleAmountCard;
-
-          let bankHintAmount: number | null = null;
-          if (
-            isSelected &&
-            (option === 'full_with_refund_bank' ||
-              option === 'full_from_refund_bank' ||
-              ((option === 'partial_with_refund_bank' ||
-                option === 'partial_from_refund_bank') &&
-                validation.valid &&
-                enteredAmount !== null))
-          ) {
-            bankHintAmount = breakdown.fromRefundBank;
-          }
-
-          const showBankHint =
-            bankHintAmount !== null && bankHintAmount > 0;
-
-          return (
-            <div
-              key={option}
-              className={[
-                'option-card',
-                isSelected || hideRadio ? 'option-card--selected' : '',
-                hideRadio ? 'option-card--static' : '',
-                showError ? 'option-card--error' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              role={hideRadio ? undefined : 'button'}
-              tabIndex={hideRadio ? undefined : 0}
-              onClick={hideRadio ? undefined : () => handleSelect(option)}
-              onKeyDown={
-                hideRadio
-                  ? undefined
-                  : (event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        handleSelect(option);
-                      }
-                    }
-              }
-            >
-              <div className="option-card__main">
-                {hideRadio ? null : <Radio checked={isSelected} />}
-                <div className="option-card__text">
-                  <p className="option-card__title">{copy.title}</p>
-                  <p className="option-card__desc">{copy.description}</p>
+          ) : null}
+          {showSellerInHeader(context) ? (
+            <div className="summary-row summary-row--with-nick">
+              <div className="summary-row__left">
+                <p className="summary-row__label">Баланс продавца</p>
+                <div className="summary-row__nick">
+                  <img
+                    className="summary-row__nick-icon"
+                    src={assetUrl('icons/trophy.png')}
+                    alt=""
+                    width={20}
+                    height={20}
+                  />
+                  <span>{context.sellerName}</span>
                 </div>
               </div>
-
-              {showAmount ? (
-                <input
-                  className="field field--amount"
-                  placeholder="Сумма"
-                  inputMode="decimal"
-                  value={isSelected || hideRadio ? amountRaw : ''}
-                  onClick={(event) => event.stopPropagation()}
-                  onFocus={() => handleSelect(option)}
-                  onChange={(event) => {
-                    handleSelect(option);
-                    setAmountRaw(event.target.value);
-                  }}
-                />
-              ) : null}
-
-              {showError ? (
-                <p className="option-card__error">{validation.error}</p>
-              ) : null}
-
-              {isSelected && showSellerAccruedHint ? (
-                <div className="option-card__hint">
-                  <img
-                    className="option-card__hint-icon"
-                    src={assetUrl('icons/icon-warning.svg')}
-                    alt=""
-                    width={16}
-                    height={16}
-                  />
-                  <p className="option-card__hint-text">
-                    Продавцу будет начислено{' '}
-                    <span className="option-card__hint-amount">
-                      {formatRub(breakdown.newSellerAccrued)}
-                    </span>
-                  </p>
-                </div>
-              ) : null}
-
-              {isSelected && showBuyerRefundHint ? (
-                <div className="option-card__hint">
-                  <img
-                    className="option-card__hint-icon"
-                    src={assetUrl('icons/icon-warning.svg')}
-                    alt=""
-                    width={16}
-                    height={16}
-                  />
-                  <p className="option-card__hint-text">
-                    Покупателю будет возвращено{' '}
-                    <span className="option-card__hint-amount">
-                      {formatRub(enteredAmount ?? 0)}
-                    </span>{' '}
-                    из{' '}
-                    <span className="option-card__hint-amount">
-                      {formatRub(context.dealBalance)}
-                    </span>
-                  </p>
-                </div>
-              ) : null}
-
-              {showBankHint ? (
-                <div className="option-card__hint">
-                  <img
-                    className="option-card__hint-icon"
-                    src={assetUrl('icons/icon-warning.svg')}
-                    alt=""
-                    width={16}
-                    height={16}
-                  />
-                  <p className="option-card__hint-text">
-                    Из банка возвратов будет списано{' '}
-                    <span className="option-card__hint-amount">
-                      {formatRub(bankHintAmount ?? 0)}
-                    </span>
-                  </p>
-                </div>
-              ) : null}
+              <p className="summary-row__value">
+                {formatRub(context.sellerBalance ?? 0)}
+              </p>
             </div>
-          );
-        })}
-      </div>
+          ) : null}
+        </div>
+      </section>
 
-      <textarea
-        className="field field--comment"
-        placeholder="Комментарий"
-        value={comment}
-        onChange={(event) => setComment(event.target.value)}
-      />
+      <section className="modal-section modal-section--card">
+        <div className="options-shell">
+          {options.map((option) => {
+            const copy = getOptionCopy(option);
+            const isSelected = selected === option;
+            const hideRadio = isSingleAmountCard;
+            const showAmount =
+              requiresAmountInput(option) && (isSelected || hideRadio);
+            const showError =
+              isSelected && needsAmount && Boolean(validation.error);
+
+            let bankHintAmount: number | null = null;
+            if (
+              isSelected &&
+              (option === 'full_with_refund_bank' ||
+                option === 'full_from_refund_bank' ||
+                ((option === 'partial_with_refund_bank' ||
+                  option === 'partial_from_refund_bank') &&
+                  validation.valid &&
+                  enteredAmount !== null))
+            ) {
+              bankHintAmount = breakdown.fromRefundBank;
+            }
+
+            const showBankHint =
+              bankHintAmount !== null && bankHintAmount > 0;
+
+            return (
+              <div
+                key={option}
+                className={[
+                  'option-card',
+                  isSelected || hideRadio ? 'option-card--selected' : '',
+                  hideRadio ? 'option-card--static' : '',
+                  showError ? 'option-card--error' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                role={hideRadio ? undefined : 'button'}
+                tabIndex={hideRadio ? undefined : 0}
+                onClick={hideRadio ? undefined : () => handleSelect(option)}
+                onKeyDown={
+                  hideRadio
+                    ? undefined
+                    : (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleSelect(option);
+                        }
+                      }
+                }
+              >
+                <div className="option-card__main">
+                  <div className="option-card__text">
+                    <p className="option-card__title">{copy.title}</p>
+                    <p className="option-card__desc">{copy.description}</p>
+                  </div>
+                  {hideRadio ? null : <Radio checked={isSelected} />}
+                </div>
+
+                {showAmount ? (
+                  <label
+                    className="field-box field-box--amount"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <span className="field-box__label">Сумма</span>
+                    <input
+                      className="field-box__input"
+                      placeholder="0"
+                      inputMode="decimal"
+                      value={isSelected || hideRadio ? amountRaw : ''}
+                      onFocus={() => handleSelect(option)}
+                      onChange={(event) => {
+                        handleSelect(option);
+                        setAmountRaw(event.target.value);
+                      }}
+                    />
+                  </label>
+                ) : null}
+
+                {showError ? (
+                  <p className="option-card__error">{validation.error}</p>
+                ) : null}
+
+                {isSelected && showSellerAccruedHint ? (
+                  <div className="option-card__hint">
+                    <img
+                      className="option-card__hint-icon"
+                      src={assetUrl('icons/icon-warning.svg')}
+                      alt=""
+                      width={24}
+                      height={24}
+                    />
+                    <p className="option-card__hint-text">
+                      Продавцу будет начислено{' '}
+                      <span className="option-card__hint-amount">
+                        {formatRub(breakdown.newSellerAccrued)}
+                      </span>
+                    </p>
+                  </div>
+                ) : null}
+
+                {isSelected && showBuyerRefundHint ? (
+                  <div className="option-card__hint">
+                    <img
+                      className="option-card__hint-icon"
+                      src={assetUrl('icons/icon-warning.svg')}
+                      alt=""
+                      width={24}
+                      height={24}
+                    />
+                    <p className="option-card__hint-text">
+                      Покупателю будет возвращено{' '}
+                      <span className="option-card__hint-amount">
+                        {formatRub(enteredAmount ?? 0)}
+                      </span>{' '}
+                      из{' '}
+                      <span className="option-card__hint-amount">
+                        {formatRub(context.dealBalance)}
+                      </span>
+                    </p>
+                  </div>
+                ) : null}
+
+                {showBankHint ? (
+                  <div className="option-card__hint">
+                    <img
+                      className="option-card__hint-icon"
+                      src={assetUrl('icons/icon-warning.svg')}
+                      alt=""
+                      width={24}
+                      height={24}
+                    />
+                    <p className="option-card__hint-text">
+                      Из банка возвратов будет списано{' '}
+                      <span className="option-card__hint-amount">
+                        {formatRub(bankHintAmount ?? 0)}
+                      </span>
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="modal-section modal-section--card">
+        <label className="field-box field-box--comment">
+          <span className="field-box__label">Комментарий</span>
+          <textarea
+            className="field-box__input field-box__input--textarea"
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+          />
+        </label>
+      </section>
     </Modal>
     {confirmOpen ? (
       <ConfirmRefundModal

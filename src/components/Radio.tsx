@@ -17,16 +17,6 @@ export function Radio({ checked }: RadioProps) {
         width={32}
         height={32}
       />
-      {checked ? (
-        <span className="radio__check">
-          <img
-            src={assetUrl('icons/radio-check.svg')}
-            alt=""
-            width={24}
-            height={24}
-          />
-        </span>
-      ) : null}
     </span>
   );
 }

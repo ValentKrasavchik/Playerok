@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Vector">
+<path d="M0 1V3H3V4H5V0H3V1H0Z" fill="#262931"/>
+<path d="M16 3V1H7V3H16Z" fill="#262931"/>
+<path d="M0 13V15H3V16H5V12H3V13H0Z" fill="#262931"/>
+<path d="M16 15V13H7V15H16Z" fill="#262931"/>
+<path d="M16 7V9H13V10H11V6H13V7H16Z" fill="#262931"/>
+<path d="M0 9V7H9V9H0Z" fill="#262931"/>
+</g>
+</svg>

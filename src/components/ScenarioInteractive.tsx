@@ -366,11 +366,11 @@ export function ScenarioInteractive({ demo }: ScenarioInteractiveProps) {
               }}
             >
               <div className="option-card__main">
-                <Radio checked={isSelected && isActive} />
                 <div className="option-card__text">
                   <p className="option-card__title">{copy.title}</p>
                   <p className="option-card__desc">{copy.description}</p>
                 </div>
+                <Radio checked={isSelected && isActive} />
               </div>
 
               {!isActive ? (
@@ -378,14 +378,19 @@ export function ScenarioInteractive({ demo }: ScenarioInteractiveProps) {
               ) : null}
 
               {showAmount ? (
-                <input
-                  className="field field--amount"
-                  placeholder="Сумма"
-                  inputMode="decimal"
-                  value={amountRaw}
+                <label
+                  className="field-box field-box--amount"
                   onClick={(event) => event.stopPropagation()}
-                  onChange={(event) => setAmountRaw(event.target.value)}
-                />
+                >
+                  <span className="field-box__label">Сумма</span>
+                  <input
+                    className="field-box__input"
+                    placeholder="0"
+                    inputMode="decimal"
+                    value={amountRaw}
+                    onChange={(event) => setAmountRaw(event.target.value)}
+                  />
+                </label>
               ) : null}
 
               {showError ? (
@@ -398,8 +403,8 @@ export function ScenarioInteractive({ demo }: ScenarioInteractiveProps) {
                     className="option-card__hint-icon"
                     src={assetUrl('icons/icon-warning.svg')}
                     alt=""
-                    width={16}
-                    height={16}
+                    width={24}
+                    height={24}
                   />
                   <p className="option-card__hint-text">
                     Продавцу будет начислено{' '}
@@ -416,8 +421,8 @@ export function ScenarioInteractive({ demo }: ScenarioInteractiveProps) {
                     className="option-card__hint-icon"
                     src={assetUrl('icons/icon-warning.svg')}
                     alt=""
-                    width={16}
-                    height={16}
+                    width={24}
+                    height={24}
                   />
                   <p className="option-card__hint-text">
                     Из банка возвратов будет списано{' '}
@@ -434,8 +439,8 @@ export function ScenarioInteractive({ demo }: ScenarioInteractiveProps) {
                     className="option-card__hint-icon"
                     src={assetUrl('icons/icon-warning.svg')}
                     alt=""
-                    width={16}
-                    height={16}
+                    width={24}
+                    height={24}
                   />
                   <p className="option-card__hint-text">
                     Покупателю будет возвращено{' '}

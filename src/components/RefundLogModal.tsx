@@ -42,24 +42,60 @@ function formatRubPlus(value: number): string {
   return `+${formatRub(value)}`;
 }
 
-function MockAvatar({ seed }: { seed: string }) {
-  const hue = Math.abs(
-    seed.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0),
-  ) % 360;
+function parseUserLabel(raw: string): { name: string; count: string | null } {
+  const match = raw.match(/^(.*?)\s*\((\d+)\)\s*$/);
+  if (match) {
+    return { name: match[1], count: match[2] };
+  }
+  return { name: raw, count: null };
+}
+
+function UserValue({
+  name,
+  count,
+  icon,
+  chevron,
+}: {
+  name: string;
+  count?: string | null;
+  icon?: string;
+  chevron?: boolean;
+}) {
   return (
-    <span
-      className="refund-log-modal__avatar"
-      style={{
-        background: `linear-gradient(145deg, hsl(${hue} 70% 42%), hsl(${(hue + 40) % 360} 80% 28%))`,
-      }}
-      aria-hidden="true"
-    />
+    <div className="refund-log-modal__user">
+      <div className="refund-log-modal__user-main">
+        {icon ? (
+          <img
+            className="refund-log-modal__user-icon"
+            src={icon}
+            alt=""
+            width={20}
+            height={20}
+          />
+        ) : null}
+        <span className="refund-log-modal__user-name">{name}</span>
+        {count != null ? (
+          <span className="refund-log-modal__chip">{count}</span>
+        ) : null}
+      </div>
+      {chevron ? (
+        <img
+          className="refund-log-modal__chevron"
+          src={assetUrl('icons/arrow-right.svg')}
+          alt=""
+          width={24}
+          height={24}
+        />
+      ) : null}
+    </div>
   );
 }
 
 export function RefundLogModal({ log, onClose }: RefundLogModalProps) {
   const [activeTx, setActiveTx] = useState<RelatedTx | null>(null);
-  const overlayRef = useEscapeToClose(onClose, activeTx === null);
+  const overlayRef = useEscapeToClose(
+    activeTx !== null ? () => setActiveTx(null) : onClose,
+  );
 
   const isInProgressPartial =
     log.dealStatus === 'in_progress' && log.breakdown.remainingAmount > 0;
@@ -92,6 +128,10 @@ export function RefundLogModal({ log, onClose }: RefundLogModalProps) {
     Math.round((1 - log.dealBalance / listPrice) * 100),
   );
 
+  const seller = parseUserLabel(log.sellerName);
+  const buyer = parseUserLabel(log.buyerName);
+  const admin = parseUserLabel(log.adminName);
+
   const activeDetail: TransactionDetailData | null =
     activeTx === 'debit'
       ? {
@@ -120,97 +160,124 @@ export function RefundLogModal({ log, onClose }: RefundLogModalProps) {
       className="overlay overlay--entity"
       role="presentation"
     >
+      {activeDetail ? (
+        <TransactionDetailModal
+          tx={activeDetail}
+          embedded
+          onClose={() => setActiveTx(null)}
+          onDismiss={onClose}
+        />
+      ) : null}
+
+      {activeDetail ? null : (
       <div className="refund-log-modal" role="dialog" aria-modal="true">
-        <div className="refund-log-modal__topbar">
-          <div className="refund-log-modal__date">{log.createdAtLabel}</div>
-          <button
-            type="button"
-            className="refund-log-modal__close"
-            aria-label="Закрыть"
-            onClick={onClose}
-          >
+        <section className="refund-log-modal__head">
+          <header className="refund-log-modal__topbar">
+            <div className="refund-log-modal__date">{log.createdAtLabel}</div>
+            <button
+              type="button"
+              className="refund-log-modal__close"
+              aria-label="Закрыть"
+              onClick={onClose}
+            >
+              <img
+                src={assetUrl('icons/icon-close-32.svg')}
+                alt=""
+                width={32}
+                height={32}
+              />
+            </button>
+          </header>
+
+          <div className="refund-log-modal__hero">
             <img
-              src={assetUrl('icons/icon-close.svg')}
+              className="refund-log-modal__hero-icon"
+              src={assetUrl('icons/wallet-emoji.png')}
               alt=""
-              width={14}
-              height={14}
+              width={56}
+              height={56}
             />
-          </button>
-        </div>
-
-        <div className="refund-log-modal__hero">
-          <img
-            className="refund-log-modal__hero-icon"
-            src={assetUrl('icons/icon-wallet.svg')}
-            alt=""
-            width={48}
-            height={48}
-          />
-          <div className="refund-log-modal__hero-title">Возврат</div>
-          <div className="refund-log-modal__hero-amount">
-            {formatRub(log.refundAmount)}
-          </div>
-        </div>
-
-        <div className="refund-log-modal__rows">
-          <div className="refund-log-modal__row">
-            <div className="refund-log-modal__row-key">Продавец</div>
-            <div className="refund-log-modal__row-value refund-log-modal__row-value--user">
-              <MockAvatar seed={log.sellerName} />
-              <span>{log.sellerName}</span>
+            <div className="refund-log-modal__hero-copy">
+              <div className="refund-log-modal__hero-title">Возврат</div>
+              <div className="refund-log-modal__hero-amount">
+                {formatRub(log.refundAmount)}
+              </div>
             </div>
           </div>
-          <div className="refund-log-modal__row">
-            <div className="refund-log-modal__row-key">Покупатель</div>
-            <div className="refund-log-modal__row-value refund-log-modal__row-value--user">
-              <MockAvatar seed={log.buyerName} />
-              <span>{log.buyerName}</span>
-            </div>
-          </div>
-          <div className="refund-log-modal__row">
-            <div className="refund-log-modal__row-key">Администратор</div>
-            <div className="refund-log-modal__row-value refund-log-modal__row-value--user">
-              <MockAvatar seed={log.adminName} />
-              <span>{log.adminName}</span>
-            </div>
-          </div>
+        </section>
 
-          {log.comment ? (
-            <div className="refund-log-modal__row refund-log-modal__row--comment">
-              <div className="refund-log-modal__row-key">Комментарий</div>
-              <div className="refund-log-modal__row-value">{log.comment}</div>
+        <section className="refund-log-modal__section">
+          <div className="refund-log-modal__rows">
+            <div className="refund-log-modal__row">
+              <div className="refund-log-modal__row-key">Продавец</div>
+              <UserValue
+                name={seller.name}
+                count={seller.count ?? '0'}
+                icon={assetUrl('icons/trophy.png')}
+                chevron
+              />
             </div>
-          ) : null}
+            <div className="refund-log-modal__row">
+              <div className="refund-log-modal__row-key">Покупатель</div>
+              <UserValue
+                name={buyer.name}
+                count={buyer.count ?? '0'}
+                chevron
+              />
+            </div>
+            <div className="refund-log-modal__row">
+              <div className="refund-log-modal__row-key">Администратор</div>
+              <UserValue
+                name={admin.name}
+                icon={assetUrl('icons/moderation.png')}
+              />
+            </div>
 
-          <div className="refund-log-modal__row refund-log-modal__row--deal">
-            <div className="refund-log-modal__row-key">Сделка</div>
+            {log.comment ? (
+              <div className="refund-log-modal__row">
+                <div className="refund-log-modal__row-key">Комментарий</div>
+                <div className="refund-log-modal__row-value">{log.comment}</div>
+              </div>
+            ) : null}
+
             <div className="refund-log-modal__deal-card">
-              <div className="refund-log-modal__deal-thumb" aria-hidden="true" />
+              <div className="refund-log-modal__deal-thumb-wrap">
+                <img
+                  className="refund-log-modal__deal-thumb"
+                  src={assetUrl('icons/product-item.png')}
+                  alt=""
+                  width={105}
+                  height={78}
+                />
+              </div>
               <div className="refund-log-modal__deal-body">
                 <div className="refund-log-modal__deal-prices">
-                  <span className="refund-log-modal__deal-price">
-                    {formatRub(log.dealBalance)}
-                  </span>
-                  <span className="refund-log-modal__deal-badge">
-                    −{discountPct}%
-                  </span>
-                  <span className="refund-log-modal__deal-old">
-                    {formatRub(listPrice)}
+                  <div className="refund-log-modal__deal-price-group">
+                    <span className="refund-log-modal__deal-price">
+                      {formatRub(log.dealBalance)}
+                    </span>
+                    <span className="refund-log-modal__deal-badge">
+                      −{discountPct}%
+                    </span>
+                    <span className="refund-log-modal__deal-old">
+                      {formatRub(listPrice)}
+                    </span>
+                  </div>
+                  <span className="refund-log-modal__deal-status">
+                    {dealStatusLabel}
                   </span>
                 </div>
                 <div className="refund-log-modal__deal-title">
-                  Test official product 2
-                </div>
-                <div className="refund-log-modal__deal-status">
-                  {dealStatusLabel}
+                  60 UC по айди очень длинное название которое переносится на
+                  новую строку и зарезается многоточием
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
         {showInProgressRelated ? (
-          <div className="refund-log-modal__related">
+          <section className="refund-log-modal__related">
             <div className="refund-log-modal__related-title">
               Связанные операции
             </div>
@@ -220,27 +287,29 @@ export function RefundLogModal({ log, onClose }: RefundLogModalProps) {
                 className="refund-log-modal__related-row"
                 onClick={() => setActiveTx('debit')}
               >
-                <div className="refund-log-modal__related-left">
-                  <img
-                    src={assetUrl('icons/icon-wallet.svg')}
-                    alt=""
-                    width={40}
-                    height={40}
-                  />
-                  <div className="refund-log-modal__related-text">
-                    <span className="refund-log-modal__related-top">
-                      Источник
-                    </span>
-                    <span className="refund-log-modal__related-bottom">
-                      Списание с покупателя
-                    </span>
-                  </div>
+                <img
+                  className="refund-log-modal__related-icon"
+                  src={assetUrl('icons/wallet-emoji.png')}
+                  alt=""
+                  width={40}
+                  height={40}
+                />
+                <div className="refund-log-modal__related-text">
+                  <span className="refund-log-modal__related-top">
+                    Источник
+                  </span>
+                  <span className="refund-log-modal__related-bottom">
+                    Списание с покупателя
+                  </span>
                 </div>
                 <div className="refund-log-modal__related-right">
                   <span>−{formatRub(inProgressRelated.buyerDebit)}</span>
-                  <span className="refund-log-modal__related-chevron" aria-hidden>
-                    ›
-                  </span>
+                  <img
+                    src={assetUrl('icons/arrow-right.svg')}
+                    alt=""
+                    width={24}
+                    height={24}
+                  />
                 </div>
               </button>
             ) : null}
@@ -250,90 +319,93 @@ export function RefundLogModal({ log, onClose }: RefundLogModalProps) {
                 className="refund-log-modal__related-row"
                 onClick={() => setActiveTx('credit')}
               >
-                <div className="refund-log-modal__related-left">
-                  <img
-                    src={assetUrl('icons/icon-wallet.svg')}
-                    alt=""
-                    width={40}
-                    height={40}
-                  />
-                  <div className="refund-log-modal__related-text">
-                    <span className="refund-log-modal__related-top">
-                      Источник
-                    </span>
-                    <span className="refund-log-modal__related-bottom">
-                      Начисление продавцу
-                    </span>
-                  </div>
+                <img
+                  className="refund-log-modal__related-icon"
+                  src={assetUrl('icons/wallet-emoji.png')}
+                  alt=""
+                  width={40}
+                  height={40}
+                />
+                <div className="refund-log-modal__related-text">
+                  <span className="refund-log-modal__related-top">
+                    Источник
+                  </span>
+                  <span className="refund-log-modal__related-bottom">
+                    Начисление продавцу
+                  </span>
                 </div>
                 <div className="refund-log-modal__related-right">
                   <span>{formatRubPlus(inProgressRelated.sellerCredit)}</span>
-                  <span className="refund-log-modal__related-chevron" aria-hidden>
-                    ›
-                  </span>
+                  <img
+                    src={assetUrl('icons/arrow-right.svg')}
+                    alt=""
+                    width={24}
+                    height={24}
+                  />
                 </div>
               </button>
             ) : null}
-          </div>
+          </section>
         ) : null}
 
         {showCompletedRelated ? (
-          <div className="refund-log-modal__related">
+          <section className="refund-log-modal__related">
             <div className="refund-log-modal__related-title">
               Связанные операции
             </div>
+            {fromBank > 0 ? (
+              <div className="refund-log-modal__related-row refund-log-modal__related-row--static">
+                <img
+                  className="refund-log-modal__related-icon"
+                  src={assetUrl('icons/bank-emoji.png')}
+                  alt=""
+                  width={40}
+                  height={40}
+                />
+                <div className="refund-log-modal__related-text">
+                  <span className="refund-log-modal__related-top">
+                    Источник
+                  </span>
+                  <span className="refund-log-modal__related-bottom">
+                    Списание с банка возвратов
+                  </span>
+                </div>
+                <div className="refund-log-modal__related-right">
+                  <span>−{formatRub(fromBank)}</span>
+                </div>
+              </div>
+            ) : null}
             {fromSeller > 0 ? (
               <button
                 type="button"
                 className="refund-log-modal__related-row"
                 onClick={() => setActiveTx('debit')}
               >
-                <div className="refund-log-modal__related-left">
-                  <img
-                    src={assetUrl('icons/icon-wallet.svg')}
-                    alt=""
-                    width={40}
-                    height={40}
-                  />
-                  <div className="refund-log-modal__related-text">
-                    <span className="refund-log-modal__related-top">
-                      Источник
-                    </span>
-                    <span className="refund-log-modal__related-bottom">
-                      Списание с продавца
-                    </span>
-                  </div>
+                <img
+                  className="refund-log-modal__related-icon"
+                  src={assetUrl('icons/wallet-emoji.png')}
+                  alt=""
+                  width={40}
+                  height={40}
+                />
+                <div className="refund-log-modal__related-text">
+                  <span className="refund-log-modal__related-top">
+                    Источник
+                  </span>
+                  <span className="refund-log-modal__related-bottom">
+                    Списание с продавца
+                  </span>
                 </div>
                 <div className="refund-log-modal__related-right">
                   <span>−{formatRub(fromSeller)}</span>
-                  <span className="refund-log-modal__related-chevron" aria-hidden>
-                    ›
-                  </span>
+                  <img
+                    src={assetUrl('icons/arrow-right.svg')}
+                    alt=""
+                    width={24}
+                    height={24}
+                  />
                 </div>
               </button>
-            ) : null}
-            {fromBank > 0 ? (
-              <div className="refund-log-modal__related-row refund-log-modal__related-row--static">
-                <div className="refund-log-modal__related-left">
-                  <img
-                    src={assetUrl('icons/icon-bank.svg')}
-                    alt=""
-                    width={40}
-                    height={40}
-                  />
-                  <div className="refund-log-modal__related-text">
-                    <span className="refund-log-modal__related-top">
-                      Источник
-                    </span>
-                    <span className="refund-log-modal__related-bottom">
-                      Списано с банка возвратов
-                    </span>
-                  </div>
-                </div>
-                <div className="refund-log-modal__related-right">
-                  <span>−{formatRub(fromBank)}</span>
-                </div>
-              </div>
             ) : null}
             {log.refundAmount > 0 ? (
               <button
@@ -341,40 +413,36 @@ export function RefundLogModal({ log, onClose }: RefundLogModalProps) {
                 className="refund-log-modal__related-row"
                 onClick={() => setActiveTx('credit')}
               >
-                <div className="refund-log-modal__related-left">
-                  <img
-                    src={assetUrl('icons/icon-wallet.svg')}
-                    alt=""
-                    width={40}
-                    height={40}
-                  />
-                  <div className="refund-log-modal__related-text">
-                    <span className="refund-log-modal__related-top">
-                      Источник
-                    </span>
-                    <span className="refund-log-modal__related-bottom">
-                      Начисление покупателю
-                    </span>
-                  </div>
+                <img
+                  className="refund-log-modal__related-icon"
+                  src={assetUrl('icons/wallet-emoji.png')}
+                  alt=""
+                  width={40}
+                  height={40}
+                />
+                <div className="refund-log-modal__related-text">
+                  <span className="refund-log-modal__related-top">
+                    Источник
+                  </span>
+                  <span className="refund-log-modal__related-bottom">
+                    Начисление покупателю
+                  </span>
                 </div>
                 <div className="refund-log-modal__related-right">
                   <span>{formatRubPlus(log.refundAmount)}</span>
-                  <span className="refund-log-modal__related-chevron" aria-hidden>
-                    ›
-                  </span>
+                  <img
+                    src={assetUrl('icons/arrow-right.svg')}
+                    alt=""
+                    width={24}
+                    height={24}
+                  />
                 </div>
               </button>
             ) : null}
-          </div>
+          </section>
         ) : null}
       </div>
-
-      {activeDetail ? (
-        <TransactionDetailModal
-          tx={activeDetail}
-          onClose={() => setActiveTx(null)}
-        />
-      ) : null}
+      )}
     </div>
   );
 }
